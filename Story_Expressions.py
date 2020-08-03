@@ -103,26 +103,33 @@ HTML_TEMPLATE = (
     '<canvas id="canvas" width="{width}" height="{height}"></canvas>'
     '<div style="position:fixed;bottom:0;left:0;right:0;height:360px;padding:2em;overflow-y:auto;'
                 'background:white;border-top:1px solid #ccc;">'
-      '<h3>Expressions</h3>'
+      '<h5>Expressions<button id="reset-btn" class="btn btn-outline-primary" style="margin-left:1em;">Reset</button></h5>'
       '<div style="display:flex;flex-flow:row wrap">{parts}</div>'
     '</div>'
     '<div id="spacer" style="height:360px;padding:2em">'
     '<script>'
-    '''function onload() {{
-      const canvas = $('#canvas')[0];
-      const ctx = canvas.getContext('2d');
-      const base_image = $('#base-img')[0];
+    '''let ctx, base_image;
+    function onload() {{
+      ctx = $('#canvas')[0].getContext('2d');
+      base_image = $('#base-img')[0];
       ctx.drawImage(base_image, 0, 0);
 
       $('.part').click(function() {{
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(base_image, 0, 0);
+        reset();
         $(this).toggleClass('selected');
         $('.selected').each(function() {{
-          console.log(this.firstChild);
           ctx.drawImage(this.firstChild, {pos_x}, {pos_y});
         }});
       }});
+      $('#reset-btn').click(function() {{
+        reset();
+        $('.selected').each(function() {{
+          $(this).removeClass('selected');
+        }});
+      }});
+    }}
+    function reset() {{
+      ctx.drawImage(base_image, 0, 0);
     }}'''
     '</script>'
   '</body>'
