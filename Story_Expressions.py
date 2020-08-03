@@ -6,7 +6,7 @@ import UnityPy
 from PIL import Image
 from collections import defaultdict
 
-def unpack_asset(file_path, use_position, make_html):
+def unpack_asset(file_path, make_html):
   image_map = {}
   composite_data = {}
 
@@ -23,7 +23,6 @@ def unpack_asset(file_path, use_position, make_html):
     str(p['colorIndex']).zfill(3): (str(p['alphaIndex']).zfill(3) if p['alphaIndex'] >= 0 else 'noalpha')
     for p in composite_data['partsTextureIndexTable']
   }
-  alpha_map = defaultdict(list)
 
   # First save the base image
   output_dir = os.path.join(os.path.dirname(file_path), base_name)
@@ -32,22 +31,22 @@ def unpack_asset(file_path, use_position, make_html):
   base_img = merge_image_alpha(image_map, base_img_name, f'{base_img_name}_alpha')
   base_img.save(os.path.join(output_dir, base_img_name + '.png'))
 
-  if use_position:
-    parts_position = composite_data['partsDataTable'][0]['position']
-    parts_size = composite_data['partsDataTable'][0]['size']
-    part_position = (int(parts_position['x'] - (parts_size['x'] / 2)), int(parts_position['y'] - (parts_size['y'] / 2)))
+  parts_position = composite_data['partsDataTable'][0]['position']
+  parts_size = composite_data['partsDataTable'][0]['size']
+  part_position = (int(parts_position['x'] - (parts_size['x'] / 2)), int(parts_position['y'] - (parts_size['y'] / 2)))
+
+  if not make_html:
     # Create blank template for pasting parts onto
     base_img = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
 
   for index, alphaIndex in partsAlphaMap.items():
     img_name = f'{base_name}_parts_c{index}'
-    alpha_map[alphaIndex].append(index)
     if alphaIndex == 'noalpha':
       img = merge_image(image_map, img_name)
     else:
       img = merge_image_alpha(image_map, img_name, f'{base_name}_parts_a{alphaIndex}_alpha')
 
-    if use_position:
+    if not make_html:
       base_img.paste(img, part_position)
       base_img.save(os.path.join(output_dir, img_name + '.png'))
     else:
@@ -55,23 +54,19 @@ def unpack_asset(file_path, use_position, make_html):
     # print(img_name)
 
   if make_html:
-    with open(os.path.join(output_dir, base_name + '.html'), 'w') as html_file:
-      images = []
-      part_options = []
-      for alphaIndex, parts in alpha_map.items():
-        images.append(f'<div id="parts{alphaIndex}_images">' + ''.join(
-          (IMG_TEMPLATE.format(name=p, src=f'{base_name}_parts_c{p}') for p in parts)
-        ) + '</div>')
-        part_options.append(
-          PART_TEMPLATE.format(part_num=alphaIndex, options=''.join(
-            (OPTION_TEMPLATE.format(p) for p in parts)
-          )))
-      
+    images = []
+    for index in partsAlphaMap:
+      images.append(IMG_TEMPLATE.format(id=index, base_name=base_name))
+
+    with open(os.path.join(output_dir, 'index.html'), 'w') as html_file:
       html_file.write(HTML_TEMPLATE.format(
         title=base_name,
-        parts_options=''.join(part_options),
         base_img=base_img_name,
-        images=''.join(images)
+        width=base_img.size[0],
+        height=base_img.size[1],
+        pos_x=part_position[0],
+        pos_y=part_position[1],
+        parts=''.join(images)
       ))
 
 
@@ -96,40 +91,50 @@ HTML_TEMPLATE = (
   '<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">'
   '<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" crossorigin="anonymous"></script>'
   '<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>'
-  '<style>.images img {{position:absolute}}</style>'
+  '<style>'
+    '.part {{padding:6px;border-radius:4px;cursor:pointer}}'
+    '.part:hover {{background:rgba(0,0,0,.2)}}'
+    '.part.selected {{background:var(--secondary)}}'
+  '</style>'
   '<title>{title}</title>'
   '</head>'
-  '<body class="container" style="padding:40px">'
-    '{parts_options}'
-    '<div class="images" style="position:relative">'
-      '<img src="{base_img}.png">'
-      '{images}'
+  '<body class="container" style="padding:40px" onload="onload()">'
+    '<img id="base-img" src="{base_img}.png" style="display:none">'
+    '<canvas id="canvas" width="{width}" height="{height}"></canvas>'
+    '<div style="position:fixed;bottom:0;left:0;right:0;height:360px;padding:2em;overflow-y:auto;'
+                'background:white;border-top:1px solid #ccc;">'
+      '<h3>Expressions</h3>'
+      '<div style="display:flex;flex-flow:row wrap">{parts}</div>'
     '</div>'
-  '<script>'
-    '''$('.part-selector').change(function() {{
-      $('#' + this.id + '_images img').hide();
-      $('img#' + this.value).show();
-    }});'''
-  '</script>'
+    '<div id="spacer" style="height:360px;padding:2em">'
+    '<script>'
+    '''function onload() {{
+      const canvas = $('#canvas')[0];
+      const ctx = canvas.getContext('2d');
+      const base_image = $('#base-img')[0];
+      ctx.drawImage(base_image, 0, 0);
+
+      $('.part').click(function() {{
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(base_image, 0, 0);
+        $(this).toggleClass('selected');
+        $('.selected').each(function() {{
+          console.log(this.firstChild);
+          ctx.drawImage(this.firstChild, {pos_x}, {pos_y});
+        }});
+      }});
+    }}'''
+    '</script>'
   '</body>'
   '</html>'
 )
-PART_TEMPLATE = (
-  'Part {part_num}:'
-  '<select class="form-control part-selector" id="parts{part_num}">'
-    '<option disabled selected value></option>'
-    '{options}'
-  '</select>'
-)
-OPTION_TEMPLATE = '<option value="{0}">{0}</option>'
-IMG_TEMPLATE = '<img id="{name}" src="{src}.png" style="display:none">'
+IMG_TEMPLATE = '<a class="part" id="{id}"><img src="{base_name}_parts_c{id}.png"></a>'
 
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Split story image bundles into expressions')
   parser.add_argument('bundle', type=str, help='input bundle')
-  parser.add_argument('-pos', type=bool, help='position the expressions relative to the overall image (default: True)', default=True)
   parser.add_argument('-html', type=bool, help='create an HTML output (default: True)', default=True)
   args = parser.parse_args()
 
-  unpack_asset(args.bundle, use_position=args.pos, make_html=args.html)
+  unpack_asset(args.bundle, make_html=args.html)
