@@ -20,7 +20,7 @@ def unpack_asset(file_path, use_position, make_html):
 
   base_name = composite_data['name']
   partsAlphaMap = {
-    str(p['colorIndex']).zfill(3): str(p['alphaIndex']).zfill(3)
+    str(p['colorIndex']).zfill(3): (str(p['alphaIndex']).zfill(3) if p['alphaIndex'] >= 0 else 'noalpha')
     for p in composite_data['partsTextureIndexTable']
   }
   alpha_map = defaultdict(list)
@@ -29,7 +29,7 @@ def unpack_asset(file_path, use_position, make_html):
   output_dir = os.path.join(os.path.dirname(file_path), base_name)
   os.makedirs(output_dir, exist_ok=True)
   base_img_name = f'{base_name}_base'
-  base_img = merged_image(image_map, base_img_name, f'{base_img_name}_alpha')
+  base_img = merge_image_alpha(image_map, base_img_name, f'{base_img_name}_alpha')
   base_img.save(os.path.join(output_dir, base_img_name + '.png'))
 
   if use_position:
@@ -42,7 +42,10 @@ def unpack_asset(file_path, use_position, make_html):
   for index, alphaIndex in partsAlphaMap.items():
     img_name = f'{base_name}_parts_c{index}'
     alpha_map[alphaIndex].append(index)
-    img = merged_image(image_map, img_name, f'{base_name}_parts_a{alphaIndex}_alpha')
+    if alphaIndex == 'noalpha':
+      img = merge_image(image_map, img_name)
+    else:
+      img = merge_image_alpha(image_map, img_name, f'{base_name}_parts_a{alphaIndex}_alpha')
 
     if use_position:
       base_img.paste(img, part_position)
@@ -72,12 +75,17 @@ def unpack_asset(file_path, use_position, make_html):
       ))
 
 
-def merged_image(image_map, img_name, alpha_name):
+def merge_image(image_map, img_name):
   Y = image_map[img_name + '_Y'].convert('RGBA').split()[-1]
   Cb = image_map[img_name + '_Cb'].convert('L').resize(Y.size, Image.ANTIALIAS)
   Cr = image_map[img_name + '_Cr'].convert('L').resize(Y.size, Image.ANTIALIAS)
-  a = image_map[alpha_name].convert('L')
   img = Image.merge('YCbCr', (Y, Cb, Cr)).convert('RGBA')
+  return img
+
+
+def merge_image_alpha(image_map, img_name, alpha_name):
+  a = image_map[alpha_name].convert('L')
+  img = merge_image(image_map, img_name)
   img.putalpha(a)
   return img
 
