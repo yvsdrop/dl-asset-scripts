@@ -108,11 +108,12 @@ HTML_TEMPLATE = (
     '</div>'
     '<div id="spacer" style="height:360px;padding:2em">'
     '<script>'
-    '''let ctx, base_image;
+    '''let ctx, canvas, base_image;
     function onload() {{
-      ctx = $('#canvas')[0].getContext('2d');
+      canvas = $('#canvas')[0];
+      ctx = canvas.getContext('2d');
       base_image = $('#base-img')[0];
-      ctx.drawImage(base_image, 0, 0);
+      reset();
 
       $('.part').click(function() {{
         reset();
@@ -129,6 +130,7 @@ HTML_TEMPLATE = (
       }});
     }}
     function reset() {{
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(base_image, 0, 0);
     }}'''
     '</script>'
